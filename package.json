@@ -22,8 +22,8 @@
     "xlsx": "latest"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4",
     "autoprefixer": "latest",
-    "postcss": "latest",
-    "tailwindcss": "latest"
+    "postcss": "latest"
   }
 }
