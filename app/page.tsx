@@ -320,15 +320,6 @@ export default function Dashboard() {
     );
   }
 
-  const getMetricsForTab = () => {
-    if (activeTab === 'weekly') return weeklyMetrics;
-    if (activeTab === 'monthly') return monthlyMetrics;
-    if (activeTab === 'revenue') return revenueMetrics;
-    if (activeTab === 'sdr') return sdrMetrics;
-  };
-
-  const metrics = getMetricsForTab();
-
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 px-4 py-6 md:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -380,39 +371,39 @@ export default function Dashboard() {
         </div>
 
         {/* KPIs - Dynamic based on tab */}
-        {activeTab === 'weekly' && metrics && (
+        {activeTab === 'weekly' && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <KPICard title="Total Leads" value={num(metrics.leads)} subtitle="From Weekly Cohort" icon={Target} />
-            <KPICard title="Booked Intros" value={num(metrics.booked)} subtitle={`${pct(metrics.bookingRate)} booking rate`} icon={TrendingUp} />
-            <KPICard title="Paid Engagements" value={num(metrics.paid)} subtitle={`${pct(metrics.paidRate)} conversion`} icon={TrendingUp} />
-            <KPICard title="Net Revenue" value={money(metrics.revenue)} subtitle={`${money(metrics.rpl)} per lead`} icon={DollarSign} />
+            <KPICard title="Total Leads" value={num(weeklyMetrics.leads)} subtitle="From Weekly Cohort" icon={Target} />
+            <KPICard title="Booked Intros" value={num(weeklyMetrics.booked)} subtitle={`${pct(weeklyMetrics.bookingRate)} booking rate`} icon={TrendingUp} />
+            <KPICard title="Paid Engagements" value={num(weeklyMetrics.paid)} subtitle={`${pct(weeklyMetrics.paidRate)} conversion`} icon={TrendingUp} />
+            <KPICard title="Net Revenue" value={money(weeklyMetrics.revenue)} subtitle={`${money(weeklyMetrics.rpl)} per lead`} icon={DollarSign} />
           </div>
         )}
 
-        {activeTab === 'monthly' && metrics && (
+        {activeTab === 'monthly' && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <KPICard title="Monthly Leads" value={num(metrics.leads)} subtitle="From Coach Monthly" icon={Target} />
-            <KPICard title="Booked Intros" value={num(metrics.booked)} subtitle={`${pct(metrics.bookingRate)} booking rate`} icon={TrendingUp} />
-            <KPICard title="Paid Engagements" value={num(metrics.paid)} subtitle={`${pct(metrics.paidRate)} conversion`} icon={TrendingUp} />
-            <KPICard title="Revenue Per Lead" value={money(metrics.rpl)} subtitle="Monthly average" icon={DollarSign} />
+            <KPICard title="Monthly Leads" value={num(monthlyMetrics.leads)} subtitle="From Coach Monthly" icon={Target} />
+            <KPICard title="Booked Intros" value={num(monthlyMetrics.booked)} subtitle={`${pct(monthlyMetrics.bookingRate)} booking rate`} icon={TrendingUp} />
+            <KPICard title="Paid Engagements" value={num(monthlyMetrics.paid)} subtitle={`${pct(monthlyMetrics.paidRate)} conversion`} icon={TrendingUp} />
+            <KPICard title="Revenue Per Lead" value={money(monthlyMetrics.rpl)} subtitle="Monthly average" icon={DollarSign} />
           </div>
         )}
 
-        {activeTab === 'revenue' && metrics && (
+        {activeTab === 'revenue' && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <KPICard title="Total Revenue" value={money(metrics.totalRevenue)} subtitle="From Overall Revenue" icon={DollarSign} />
-            <KPICard title="Billed Amount" value={money(metrics.billedAmount)} subtitle="Total invoiced" icon={DollarSign} />
-            <KPICard title="Active Coaches" value={metrics.numCoaches} subtitle="Unique coaches" icon={Target} />
-            <KPICard title="Avg per Coach" value={money(metrics.avgPerCoach)} subtitle="Revenue average" icon={DollarSign} />
+            <KPICard title="Total Revenue" value={money(revenueMetrics.totalRevenue)} subtitle="From Overall Revenue" icon={DollarSign} />
+            <KPICard title="Billed Amount" value={money(revenueMetrics.billedAmount)} subtitle="Total invoiced" icon={DollarSign} />
+            <KPICard title="Active Coaches" value={revenueMetrics.numCoaches} subtitle="Unique coaches" icon={Target} />
+            <KPICard title="Avg per Coach" value={money(revenueMetrics.avgPerCoach)} subtitle="Revenue average" icon={DollarSign} />
           </div>
         )}
 
-        {activeTab === 'sdr' && metrics && (
+        {activeTab === 'sdr' && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <KPICard title="Calls Booked" value={num(metrics.booked)} subtitle="SDR bookings" icon={TrendingUp} />
-            <KPICard title="Show-up Rate" value={pct(metrics.showUpRate)} subtitle={`${num(metrics.showUp)} showed up`} icon={TrendingUp} />
-            <KPICard title="Paid Conversions" value={num(metrics.paid)} subtitle={`${pct(metrics.paidRate)} from show-ups`} icon={TrendingUp} />
-            <KPICard title="No-shows" value={num(metrics.noShow)} subtitle={`${pct(1 - metrics.showUpRate)} didn't show`} icon={Target} />
+            <KPICard title="Calls Booked" value={num(sdrMetrics.booked)} subtitle="SDR bookings" icon={TrendingUp} />
+            <KPICard title="Show-up Rate" value={pct(sdrMetrics.showUpRate)} subtitle={`${num(sdrMetrics.showUp)} showed up`} icon={TrendingUp} />
+            <KPICard title="Paid Conversions" value={num(sdrMetrics.paid)} subtitle={`${pct(sdrMetrics.paidRate)} from show-ups`} icon={TrendingUp} />
+            <KPICard title="No-shows" value={num(sdrMetrics.noShow)} subtitle={`${pct(1 - sdrMetrics.showUpRate)} didn't show`} icon={Target} />
           </div>
         )}
 
