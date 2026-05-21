@@ -53,6 +53,15 @@ async function parseWorkbook(buffer: ArrayBuffer): Promise<WorkbookData> {
   return parsed;
 }
 
+function findColumn(row: Row, patterns: string[]): any {
+  const keys = Object.keys(row);
+  for (const pattern of patterns) {
+    const key = keys.find((k) => k.includes(pattern.toLowerCase()));
+    if (key !== undefined) return row[key];
+  }
+  return null;
+}
+
 function KPICard({ title, value, subtitle, icon: Icon }: any) {
   return (
     <motion.div
@@ -108,9 +117,9 @@ export default function Dashboard() {
 
   const sheets = useMemo(() => {
     return {
+      weeklyCohort: workbook['Weekly Cohort'] || [],
       coachWeekly: workbook['Coach Weekly'] || [],
       coachMonthly: workbook['Coach Monthly'] || [],
-      weeklyCohor: workbook['Weekly Cohort'] || [],
       overallWeekly: workbook['Overall Weekly'] || [],
       overallRevenue: workbook['Overall Revenue'] || [],
       engagements: workbook['Engagements'] || [],
@@ -120,15 +129,17 @@ export default function Dashboard() {
     };
   }, [workbook]);
 
-  const sum = (rows: Row[], key: string): number => rows.reduce((acc, r) => acc + clean(r[key]), 0);
-  const avg = (rows: Row[], key: string): number => (rows.length ? sum(rows, key) / rows.length : 0);
+  const sum = (rows: Row[], patterns: string[]): number => {
+    return rows.reduce((acc, r) => acc + clean(findColumn(r, patterns)), 0);
+  };
 
+  // Primary metrics from Weekly Cohort (source of truth)
   const metrics = useMemo(() => {
-    const leads = sum(sheets.coachWeekly, 'leads given');
-    const booked = sum(sheets.coachWeekly, 'booked intro calls');
-    const paid = sum(sheets.coachWeekly, 'paid engagements');
-    const adjusted = sum(sheets.coachWeekly, 'adjusted intro calls');
-    const revenue = sum(sheets.overallRevenue, 'current take home 12 mo') || sum(sheets.engagements, 'paid amount');
+    const leads = sum(sheets.weeklyCohort, ['leads', 'form submission', 'lead']);
+    const booked = sum(sheets.weeklyCohort, ['booked', 'intro calls', 'intro']);
+    const paid = sum(sheets.weeklyCohort, ['paid', 'paid engagement', 'conversion']);
+    const adjusted = sum(sheets.weeklyCohort, ['adjusted']);
+    const revenue = sum(sheets.overallRevenue, ['take home', 'current', 'revenue']) || sum(sheets.engagements, ['paid amount', 'paid']);
 
     return {
       leads,
@@ -143,24 +154,35 @@ export default function Dashboard() {
     };
   }, [sheets]);
 
+  // Coach metrics from Coach Weekly
   const coachMetrics = useMemo(() => {
     const map: Record<string, any> = {};
 
     sheets.coachWeekly.forEach((row) => {
-      const coachName = Object.values(row).find((v) => typeof v === 'string' && !String(v).match(/^\d/)) || 'Unknown';
+      const coachName = findColumn(row, ['coach', 'name']) || 'Unknown';
       if (!map[coachName]) {
-        map[coachName] = { coach: coachName, leads: 0, booked: 0, paid: 0, revenue: 0 };
+        map[coachName] = { coach: coachName, leads: 0, booked: 0, adjusted: 0, paid: 0, revenue: 0 };
       }
-      map[coachName].leads += clean(row['leads given']);
-      map[coachName].booked += clean(row['booked intro calls']);
-      map[coachName].paid += clean(row['paid engagements']);
+      map[coachName].leads += clean(findColumn(row, ['leads', 'form submission', 'lead']));
+      map[coachName].booked += clean(findColumn(row, ['booked', 'intro calls']));
+      map[coachName].adjusted += clean(findColumn(row, ['adjusted', 'intro']));
+      map[coachName].paid += clean(findColumn(row, ['paid', 'engagement']));
+    });
+
+    // Add revenue from Overall Revenue
+    sheets.overallRevenue.forEach((row) => {
+      const coachName = findColumn(row, ['coach', 'name']) || 'Unknown';
+      if (map[coachName]) {
+        map[coachName].revenue += clean(findColumn(row, ['take home', 'current', 'revenue', 'paid']));
+      }
     });
 
     return Object.values(map)
       .map((c: any) => ({
         ...c,
         paidRate: c.leads > 0 ? c.paid / c.leads : 0,
-        bookingRate: c.leads > 0 ? c.booked / c.leads : 0
+        bookingRate: c.leads > 0 ? c.booked / c.leads : 0,
+        adjustedRate: c.adjusted > 0 ? c.paid / c.adjusted : 0
       }))
       .sort((a: any, b: any) => b.paidRate - a.paidRate);
   }, [sheets]);
@@ -210,7 +232,7 @@ export default function Dashboard() {
                 <BarChart3 size={16} /> STS Marketplace Intelligence
               </div>
               <h1 className="text-4xl font-semibold tracking-tight text-slate-950 md:text-5xl">Marketplace Dashboard</h1>
-              <p className="mt-3 max-w-3xl text-slate-600">Real-time analysis of coach performance, marketplace funnel, and revenue metrics.</p>
+              <p className="mt-3 max-w-3xl text-slate-600">Real-time analysis powered by Weekly Cohort data as source of truth.</p>
             </div>
             <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 font-semibold text-white hover:bg-slate-800">
               <Upload size={16} /> Upload Report
@@ -234,20 +256,46 @@ export default function Dashboard() {
 
         {/* KPIs */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <KPICard title="Total Leads" value={num(metrics.leads)} subtitle="Lead volume from all sources" icon={Target} />
+          <KPICard title="Total Leads" value={num(metrics.leads)} subtitle="From Weekly Cohort" icon={Target} />
           <KPICard title="Booked Intros" value={num(metrics.booked)} subtitle={`${pct(metrics.bookingRate)} booking rate`} icon={TrendingUp} />
           <KPICard title="Paid Engagements" value={num(metrics.paid)} subtitle={`${pct(metrics.paidRate)} conversion`} icon={TrendingUp} />
           <KPICard title="Net Revenue" value={money(metrics.revenue)} subtitle={`${money(metrics.rpl)} per lead`} icon={DollarSign} />
         </div>
 
+        {/* Executive Summary */}
+        <Section title="Executive Summary" desc="Key insights based on Weekly Cohort metrics.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl bg-blue-50 p-4">
+              <p className="text-sm font-medium text-blue-700">Booking Efficiency</p>
+              <p className="mt-1 text-2xl font-bold text-blue-900">{pct(metrics.bookingRate)}</p>
+              <p className="mt-1 text-xs text-blue-600">of leads booked intro calls</p>
+            </div>
+            <div className="rounded-2xl bg-green-50 p-4">
+              <p className="text-sm font-medium text-green-700">Paid Conversion</p>
+              <p className="mt-1 text-2xl font-bold text-green-900">{pct(metrics.paidRate)}</p>
+              <p className="mt-1 text-xs text-green-600">lead-to-paid conversion rate</p>
+            </div>
+            <div className="rounded-2xl bg-purple-50 p-4">
+              <p className="text-sm font-medium text-purple-700">Intro Close Rate</p>
+              <p className="mt-1 text-2xl font-bold text-purple-900">{pct(metrics.introClose)}</p>
+              <p className="mt-1 text-xs text-purple-600">from adjusted intro calls</p>
+            </div>
+            <div className="rounded-2xl bg-amber-50 p-4">
+              <p className="text-sm font-medium text-amber-700">Revenue Per Lead</p>
+              <p className="mt-1 text-2xl font-bold text-amber-900">{money(metrics.rpl)}</p>
+              <p className="mt-1 text-xs text-amber-600">average per lead</p>
+            </div>
+          </div>
+        </Section>
+
         {/* Coach Leaderboard */}
         {coachMetrics.length > 0 && (
-          <Section title="Coach Performance Leaderboard" desc="Ranked by paid engagement conversion rate.">
+          <Section title="Coach Performance Leaderboard" desc="Ranked by paid engagement conversion rate (Coach Weekly data).">
             <div className="overflow-x-auto rounded-3xl border border-slate-200">
-              <table className="w-full min-w-[900px] text-left text-sm">
+              <table className="w-full min-w-[1000px] text-left text-sm">
                 <thead className="bg-slate-100 text-slate-700">
                   <tr>
-                    {['Coach', 'Leads', 'Booked', 'Paid', 'Paid Rate', 'Booking Rate'].map((h) => (
+                    {['Coach', 'Leads', 'Booked', 'Adjusted', 'Paid', 'Paid Rate', 'Book Rate', 'Intro Close'].map((h) => (
                       <th key={h} className="px-4 py-3 font-semibold">
                         {h}
                       </th>
@@ -255,14 +303,16 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
-                  {filteredCoaches.slice(0, 15).map((c, idx) => (
+                  {filteredCoaches.slice(0, 20).map((c, idx) => (
                     <tr key={idx} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-medium text-slate-900">{c.coach}</td>
                       <td className="px-4 py-3">{num(c.leads)}</td>
                       <td className="px-4 py-3">{num(c.booked)}</td>
-                      <td className="px-4 py-3">{num(c.paid)}</td>
+                      <td className="px-4 py-3">{num(c.adjusted)}</td>
+                      <td className="px-4 py-3 font-semibold">{num(c.paid)}</td>
                       <td className="px-4 py-3 font-semibold text-green-700">{pct(c.paidRate)}</td>
                       <td className="px-4 py-3">{pct(c.bookingRate)}</td>
+                      <td className="px-4 py-3">{pct(c.adjustedRate)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -272,28 +322,46 @@ export default function Dashboard() {
         )}
 
         {/* Charts */}
-        {sheets.coachWeekly.length > 0 && (
-          <Section title="Conversion Performance" desc="Paid engagement rates by coach.">
-            <div className="h-96">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={coachMetrics.slice(0, 10)} layout="vertical" margin={{ left: 120 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={(v) => pct(v)} />
-                  <YAxis type="category" dataKey="coach" width={110} />
-                  <Tooltip formatter={(v: any) => pct(v)} />
-                  <Bar dataKey="paidRate" radius={[0, 8, 8, 0]} fill="#10b981" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Section>
+        {coachMetrics.length > 0 && (
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Section title="Paid Conversion Rate by Coach" desc="Who converts leads to paid engagements most effectively.">
+              <div className="h-96">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={coachMetrics.slice(0, 12)} layout="vertical" margin={{ left: 120 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" tickFormatter={(v) => pct(v)} />
+                    <YAxis type="category" dataKey="coach" width={110} />
+                    <Tooltip formatter={(v: any) => pct(v)} />
+                    <Bar dataKey="paidRate" radius={[0, 8, 8, 0]} fill="#10b981" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Section>
+
+            <Section title="Booking Rate by Coach" desc="Who books intro calls most effectively from leads.">
+              <div className="h-96">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={coachMetrics.slice(0, 12)} layout="vertical" margin={{ left: 120 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" tickFormatter={(v) => pct(v)} />
+                    <YAxis type="category" dataKey="coach" width={110} />
+                    <Tooltip formatter={(v: any) => pct(v)} />
+                    <Bar dataKey="bookingRate" radius={[0, 8, 8, 0]} fill="#3b82f6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Section>
+          </div>
         )}
 
-        {/* Data Summary */}
-        <Section title="Data Validation" desc="Workbook sheets detected and parsed.">
+        {/* Data Validation */}
+        <Section title="Data Validation" desc="Workbook sheets detected and rows parsed. Weekly Cohort is primary data source.">
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {Object.entries(sheets).map(([name, data]) => (
-              <div key={name} className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-700">{name}</p>
+              <div key={name} className={`rounded-2xl p-4 ${name === 'weeklyCohort' ? 'bg-blue-50 border-2 border-blue-200' : 'bg-slate-50'}`}>
+                <p className={`text-sm font-semibold ${name === 'weeklyCohort' ? 'text-blue-700' : 'text-slate-700'}`}>
+                  {name === 'weeklyCohort' ? '⭐ ' : ''}{name.replace(/([A-Z])/g, ' $1').trim()}
+                </p>
                 <p className="mt-1 text-lg font-bold text-slate-900">{data.length} rows</p>
               </div>
             ))}
